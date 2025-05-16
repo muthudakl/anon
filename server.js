@@ -4,6 +4,9 @@ const bodyParser = require('body-parser');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Serve static files from the 'screenshots' folder
+app.use('/screenshots', express.static(path.join(__dirname, 'screenshots')));
+
 // Create "screenshots" folder if not exists
 if (!fs.existsSync('screenshots')) {
   fs.mkdirSync('screenshots');
